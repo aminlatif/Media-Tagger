@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fs};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::{collections::HashMap, fs};
 
 static TOKEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{(.+?)\}\}").unwrap());
 static TOKEN_DECODE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\w)(\d+)\.(.+)").unwrap());
@@ -10,7 +10,14 @@ static TOKEN_DECODE_FORMAT_CLEAN_REGEX: Lazy<Regex> =
 static TOKEN_DECODE_FORMAT_TITLE_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"[ ',\.\-_%]"#).unwrap());
 
-pub fn rename_files(target_directory: &str, file_name_template: &str, file_name_check_template: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn rename_files(
+    target_directory: &str,
+    file_name_template: &str,
+    file_name_check_template: &str,
+    has_season_directory: bool,
+    season_directory_template: &str,
+    dry_run: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let csv_content = fs::read_to_string(target_directory.to_string() + "/.tagger/guide.csv")?;
 
     let mut rdr = csv::Reader::from_reader(csv_content.as_bytes());
@@ -29,9 +36,14 @@ pub fn rename_files(target_directory: &str, file_name_template: &str, file_name_
             target_file_name, source_file_name_check
         );
 
-        let season_directory_name =
-            replace_file_name_template_tokens(String::from("Season{{i1.p2}}"), fields);
-        let season_directory_path = target_directory.to_string() + "\\" + &season_directory_name;
+        let mut season_directory_path = target_directory.to_string();
+
+        if has_season_directory {
+            let season_directory_name =
+                replace_file_name_template_tokens(String::from(season_directory_template), fields);
+            season_directory_path = season_directory_path + "/" + &season_directory_name;
+        }
+
         if !std::path::Path::new(&season_directory_path).exists() {
             println!(
                 "\x1b[31mSeason directory path \"{}\" does not exist.\x1b[0m",
@@ -40,7 +52,7 @@ pub fn rename_files(target_directory: &str, file_name_template: &str, file_name_
             continue;
         }
 
-        println!("Searching in \"{}\"...", season_directory_name);
+        println!("Searching in \"{}\"...", season_directory_path);
 
         let matches = find_file_by_partial_name(&season_directory_path, source_file_name_check);
         if matches.is_empty() {
@@ -59,17 +71,32 @@ pub fn rename_files(target_directory: &str, file_name_template: &str, file_name_
                 // let original_file_name = path.file_name().unwrap().to_str().unwrap();
                 let original_file_extension = path.extension().unwrap().to_str().unwrap();
                 let original_file_without_extension = path.file_stem().unwrap().to_str().unwrap();
-                println!("\x1b[34mOriginal file name: {} ({})\x1b[0m", original_file_without_extension, original_file_extension);
-                let target_file_path = season_directory_path.to_string() + "\\" + &target_file_name + "." + original_file_extension;
+                println!(
+                    "\x1b[34mOriginal file name: {} ({})\x1b[0m",
+                    original_file_without_extension, original_file_extension
+                );
+                let target_file_path = season_directory_path.to_string()
+                    + "/"
+                    + &target_file_name
+                    + "."
+                    + original_file_extension;
                 println!("\x1b[34mTaget file path: {}\x1b[0m", target_file_path);
-                fs::rename(path.clone(), season_directory_path.to_string() + "\\" + &target_file_name + "." + original_file_extension)?;
+                if !dry_run {
+                    fs::rename(
+                        path.clone(),
+                        season_directory_path.to_string()
+                            + "/"
+                            + &target_file_name
+                            + "."
+                            + original_file_extension,
+                    )?;
+                }
             }
         }
     }
 
     Ok(())
 }
-
 
 fn find_file_by_partial_name(root: &str, partial_name: String) -> Vec<std::path::PathBuf> {
     walkdir::WalkDir::new(root)
@@ -105,15 +132,11 @@ fn replace_file_name_template_tokens(template: String, record: Vec<String>) -> S
 }
 
 fn get_record_value_for_token(token: String, record: Vec<String>) -> String {
-    let mut token_type = String::from("i");
-    let mut token_index = 0;
-    let mut token_format = String::from("p2");
-    let mut token_format_hashmap: HashMap<String, u8> = HashMap::new();
-
     let capture = TOKEN_DECODE_REGEX.captures(&token).unwrap();
-    token_type = capture[1].to_string();
-    token_index = capture[2].parse().unwrap();
-    token_format = capture[3].to_string();
+    let token_type = capture[1].to_string();
+    let token_index : usize = capture[2].parse().unwrap();
+    let token_format = capture[3].to_string();
+    let mut token_format_hashmap: HashMap<String, u8> = HashMap::new();
 
     for format_capture in TOKEN_DECODE_FORMAT_REGEX.captures_iter(&token_format) {
         let format_type: String = format_capture[1].to_string();

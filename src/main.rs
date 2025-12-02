@@ -22,9 +22,18 @@ const EPISODE_SELECTOR_SKIP: i32 = 0;
 
 const EPISODE_FIELD_SELECTORS: [[&str; 2]; 2] = [["title", "td.summary"], ["#", "th"]];
 
-const FILE_NAME_TEMPLATE: &str = "Futurama-S{{i1.p2}}E{{i2.p2}}-{{s3.ct}}";
+// const FILE_NAME_TEMPLATE: &str = "Futurama-S{{i1.p2}}E{{i2.p2}}-{{s3.ct}}";
+const FILE_NAME_TEMPLATE: &str = "Dororo-{{i2.p2}}-{{s3.ct}}";
 
-const FILE_NAME_CHECK_TEMPLATE: &str = "Futurama_S{{i1.p2}}E{{i2.p2}}";
+// const FILE_NAME_CHECK_TEMPLATE: &str = "Futurama_S{{i1.p2}}E{{i2.p2}}";
+const FILE_NAME_CHECK_TEMPLATE: &str = "Dororo - {{i2.p2}}";
+
+// const HAS_SEASON_DIRECTORY: bool = true;
+const HAS_SEASON_DIRECTORY: bool = false;
+
+const SEASON_DIRECTORY_TEMPLATE: &str = "Season{{i1.p2}}";
+
+const DRY_RUN: bool = false;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,6 +64,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             TARGET_DIRECTORY,
             FILE_NAME_TEMPLATE,
             FILE_NAME_CHECK_TEMPLATE,
+            HAS_SEASON_DIRECTORY,
+            SEASON_DIRECTORY_TEMPLATE,
+            DRY_RUN
         )?;
     }
 
