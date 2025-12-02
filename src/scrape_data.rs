@@ -1,16 +1,16 @@
 use reqwest::Client;
+use serde::de::value;
 use std::fs;
 
 use crate::rule::Rule;
 
 pub async fn scrape_data(
-    rule: &Rule
-    // target_directory: &str,
-    // season_selector_query: &str,
-    // season_selector_skip_init: i32,
-    // episode_selector_query: &str,
-    // episode_selector_skip_init: i32,
-    // episode_field_selectors: Vec<Vec<String>>,
+    rule: &Rule, // target_directory: &str,
+                 // season_selector_query: &str,
+                 // season_selector_skip_init: i32,
+                 // episode_selector_query: &str,
+                 // episode_selector_skip_init: i32,
+                 // episode_field_selectors: Vec<Vec<String>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tagger_directory_path = rule.target_directory.to_string() + "/.tagger";
 
@@ -46,7 +46,8 @@ pub async fn scrape_data(
             continue;
         }
 
-        let episode_selector = scraper::Selector::parse(rule.episode_selector_query.as_str()).unwrap();
+        let episode_selector =
+            scraper::Selector::parse(rule.episode_selector_query.as_str()).unwrap();
         let mut episode_selector_skip = rule.episode_selector_skip;
 
         let mut episode = 1;
@@ -54,6 +55,14 @@ pub async fn scrape_data(
         for episode_element in season_element.select(&episode_selector) {
             if episode_selector_skip > 0 {
                 episode_selector_skip = episode_selector_skip - 1;
+                continue;
+            }
+
+            if episode_element
+                .select(&scraper::Selector::parse(&rule.episode_field_selectors[0].selector_query.as_str()).unwrap())
+                .next()
+                .is_none()
+            {
                 continue;
             }
 
@@ -65,9 +74,13 @@ pub async fn scrape_data(
                 csv_content.push_str(",");
                 let field_element = episode_element
                     .select(&scraper::Selector::parse(&field.selector_query.as_str()).unwrap())
-                    .next()
-                    .unwrap();
-                let field_value = field_element.text().collect::<String>();
+                    .next();
+                if field_element.is_none() {
+                    println!("{:#?}", episode_element);
+                    panic!("Field {} is empty. {}: Season{}, Episode{}", field.title, episode_cul, season, episode);
+                }
+                let field_element = field_element.unwrap();
+                let field_value = field_element.inner_html();
                 let field_value = refine_field_value(field_value);
                 csv_content.push_str(field_value.as_str());
             }
@@ -89,15 +102,19 @@ pub async fn scrape_data(
 }
 
 pub async fn get_html_content(
-    rule: &Rule
-    // target_directory: &str,
-    // scrape_url: &str,
+    rule: &Rule, // target_directory: &str,
+                 // scrape_url: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder()
         .user_agent("MediaTgger/1.0 (contact: amin.latifkar@gmail.com)")
         .build()?;
 
-    let response_text = client.get(rule.scrape_url.clone()).send().await?.text().await?;
+    let response_text = client
+        .get(rule.scrape_url.clone())
+        .send()
+        .await?
+        .text()
+        .await?;
 
     let tagger_directory_path = rule.target_directory.to_string() + "/.tagger";
 
@@ -111,8 +128,20 @@ pub async fn get_html_content(
 }
 
 pub fn refine_field_value(field_value: String) -> String {
-    let field_value_array: Vec<String> = field_value.split("<br").map(|s| s.to_string()).collect();
-    let field_value = field_value_array[0].clone();
+    let field_value = field_value
+        .trim()
+        .replace("<br>", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br >", "\n")
+        .replace("<br />", "\n");
+    let field_value_html = scraper::Html::parse_document(&field_value);
+    let field_value = field_value_html.root_element()
+        .text()
+        .collect::<Vec<_>>()
+        .join("");
+
+    let field_value_array = field_value.split("\n").collect::<Vec<_>>();
+    let field_value = field_value_array[0];
     let field_value = field_value
         .trim()
         .replace("\n", " ")

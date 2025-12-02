@@ -11,13 +11,14 @@ use rename_files::rename_files;
 
 use crate::rule::Rule;
 
-const RULE_FILE_PATH: &str = "rules.dororo.yml";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 
-    let rule = parse_yaml(RULE_FILE_PATH)?;
+    let rule_file_path = args.get(1).unwrap();
+
+    let rule = parse_yaml(rule_file_path)?;
 
     if args.contains(&String::from("html")) || args.contains(&String::from("all")) {
         get_html_content(&rule).await?;
