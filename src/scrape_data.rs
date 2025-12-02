@@ -1,15 +1,18 @@
 use reqwest::Client;
 use std::fs;
 
+use crate::rule::Rule;
+
 pub async fn scrape_data(
-    target_directory: &str,
-    season_selector_query: &str,
-    season_selector_skip_init: i32,
-    episode_selector_query: &str,
-    episode_selector_skip_init: i32,
-    episode_field_selectors: Vec<Vec<String>>,
+    rule: &Rule
+    // target_directory: &str,
+    // season_selector_query: &str,
+    // season_selector_skip_init: i32,
+    // episode_selector_query: &str,
+    // episode_selector_skip_init: i32,
+    // episode_field_selectors: Vec<Vec<String>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let tagger_directory_path = target_directory.to_string() + "/.tagger";
+    let tagger_directory_path = rule.target_directory.to_string() + "/.tagger";
 
     let guide_html_file_path = tagger_directory_path.clone() + "/guide.html";
 
@@ -25,14 +28,14 @@ pub async fn scrape_data(
 
     csv_content.push_str("#,season,episode");
 
-    for field in episode_field_selectors.iter() {
+    for field in rule.episode_field_selectors.iter() {
         csv_content.push_str(",");
-        csv_content.push_str(field[0].to_string().as_str());
+        csv_content.push_str(&field.title.to_string().as_str());
     }
     csv_content.push_str("\n");
 
-    let season_selector = scraper::Selector::parse(season_selector_query).unwrap();
-    let mut season_selector_skip = season_selector_skip_init;
+    let season_selector = scraper::Selector::parse(rule.season_selector_query.as_str()).unwrap();
+    let mut season_selector_skip = rule.season_selector_skip;
 
     let mut season = 1;
     let mut episode_cul = 1;
@@ -43,8 +46,8 @@ pub async fn scrape_data(
             continue;
         }
 
-        let episode_selector = scraper::Selector::parse(episode_selector_query).unwrap();
-        let mut episode_selector_skip = episode_selector_skip_init;
+        let episode_selector = scraper::Selector::parse(rule.episode_selector_query.as_str()).unwrap();
+        let mut episode_selector_skip = rule.episode_selector_skip;
 
         let mut episode = 1;
 
@@ -58,13 +61,13 @@ pub async fn scrape_data(
             csv_content.push_str((season.to_string() + ",").as_str());
             csv_content.push_str((episode.to_string()).as_str());
 
-            for field in episode_field_selectors.iter() {
+            for field in rule.episode_field_selectors.iter() {
                 csv_content.push_str(",");
                 let field_element = episode_element
-                    .select(&scraper::Selector::parse(field[1].as_str()).unwrap())
+                    .select(&scraper::Selector::parse(&field.selector_query.as_str()).unwrap())
                     .next()
                     .unwrap();
-                let field_value = field_element.inner_html();
+                let field_value = field_element.text().collect::<String>();
                 let field_value = refine_field_value(field_value);
                 csv_content.push_str(field_value.as_str());
             }
@@ -86,16 +89,17 @@ pub async fn scrape_data(
 }
 
 pub async fn get_html_content(
-    target_directory: &str,
-    scrape_url: &str,
+    rule: &Rule
+    // target_directory: &str,
+    // scrape_url: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder()
         .user_agent("MediaTgger/1.0 (contact: amin.latifkar@gmail.com)")
         .build()?;
 
-    let response_text = client.get(scrape_url).send().await?.text().await?;
+    let response_text = client.get(rule.scrape_url.clone()).send().await?.text().await?;
 
-    let tagger_directory_path = target_directory.to_string() + "/.tagger";
+    let tagger_directory_path = rule.target_directory.to_string() + "/.tagger";
 
     if !std::path::Path::new(&tagger_directory_path).exists() {
         fs::create_dir(&tagger_directory_path).unwrap();
@@ -107,7 +111,7 @@ pub async fn get_html_content(
 }
 
 pub fn refine_field_value(field_value: String) -> String {
-    let field_value_array: Vec<String> = field_value.split("<").map(|s| s.to_string()).collect();
+    let field_value_array: Vec<String> = field_value.split("<br").map(|s| s.to_string()).collect();
     let field_value = field_value_array[0].clone();
     let field_value = field_value
         .trim()

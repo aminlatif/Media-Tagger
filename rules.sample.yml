@@ -1,0 +1,22 @@
+target_directory: "F:/Videos/Series/Futurama"
+scrape_url: "https://theinfosphere.org/Episode_Listing_(broadcast_order)"
+season_selector_query: "table.overview"
+season_selector_skip: 0
+episode_selector_query: "tr.oCentre"
+episode_selector_skip: 0
+episode_field_selectors:
+  - title: "Title"
+    selector_query: "td.oLeft"
+  - title: "Original Airdate"
+    selector_query: "td:nth-child(2)"
+  - title: "Production Code"
+    selector_query: "td:nth-child(3)"
+  - title: "TV Broadcast"
+    selector_query: "td:nth-child(4)"
+  - title: "cul"
+    selector_query: "td:last-child"
+file_name_template: "Futurama-S{{i1.p2}}E{{i2.p2}}-{{s3.ct}}"
+file_name_check_template: "Futurama_S{{i1.p2}}E{{i2.p2}}"
+has_season_directory: true
+season_directory_template: "Season{{i1.p2}}"
+dry_run: false

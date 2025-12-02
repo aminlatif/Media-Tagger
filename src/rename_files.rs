@@ -2,6 +2,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{collections::HashMap, fs};
 
+use crate::rule::Rule;
+
 static TOKEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{(.+?)\}\}").unwrap());
 static TOKEN_DECODE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\w)(\d+)\.(.+)").unwrap());
 static TOKEN_DECODE_FORMAT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\w)(\d*)").unwrap());
@@ -11,14 +13,15 @@ static TOKEN_DECODE_FORMAT_TITLE_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"[ ',\.\-_%]"#).unwrap());
 
 pub fn rename_files(
-    target_directory: &str,
-    file_name_template: &str,
-    file_name_check_template: &str,
-    has_season_directory: bool,
-    season_directory_template: &str,
-    dry_run: bool,
+    rule: &Rule
+    // target_directory: &str,
+    // file_name_template: &str,
+    // file_name_check_template: &str,
+    // has_season_directory: bool,
+    // season_directory_template: &str,
+    // dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let csv_content = fs::read_to_string(target_directory.to_string() + "/.tagger/guide.csv")?;
+    let csv_content = fs::read_to_string(rule.target_directory.to_string() + "/.tagger/guide.csv")?;
 
     let mut rdr = csv::Reader::from_reader(csv_content.as_bytes());
 
@@ -26,9 +29,9 @@ pub fn rename_files(
         let record = result?;
         let fields: Vec<String> = record.iter().map(|s| s.to_string()).collect();
         let target_file_name =
-            replace_file_name_template_tokens(String::from(file_name_template), fields.clone());
+            replace_file_name_template_tokens(String::from(rule.file_name_template.clone()), fields.clone());
         let source_file_name_check = replace_file_name_template_tokens(
-            String::from(file_name_check_template),
+            String::from(rule.file_name_check_template.clone()),
             fields.clone(),
         );
         println!(
@@ -36,11 +39,11 @@ pub fn rename_files(
             target_file_name, source_file_name_check
         );
 
-        let mut season_directory_path = target_directory.to_string();
+        let mut season_directory_path = rule.target_directory.to_string();
 
-        if has_season_directory {
+        if rule.has_season_directory {
             let season_directory_name =
-                replace_file_name_template_tokens(String::from(season_directory_template), fields);
+                replace_file_name_template_tokens(String::from(rule.season_directory_template.clone()), fields);
             season_directory_path = season_directory_path + "/" + &season_directory_name;
         }
 
@@ -81,7 +84,7 @@ pub fn rename_files(
                     + "."
                     + original_file_extension;
                 println!("\x1b[34mTaget file path: {}\x1b[0m", target_file_path);
-                if !dry_run {
+                if !rule.dry_run {
                     fs::rename(
                         path.clone(),
                         season_directory_path.to_string()
