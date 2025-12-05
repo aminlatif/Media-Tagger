@@ -8,6 +8,7 @@ use scrape_data::get_html_content;
 use scrape_data::scrape_data;
 
 use rename_files::rename_files;
+use rename_files::generate_rename_csv;
 
 use crate::rule::Rule;
 
@@ -26,6 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args.contains(&String::from("scrape")) || args.contains(&String::from("all")) {
         scrape_data(&rule).await?;
+    }
+
+    if args.contains(&String::from("generate")) || args.contains(&String::from("all")) {
+        generate_rename_csv(&rule)?;
     }
 
     if args.contains(&String::from("rename")) || args.contains(&String::from("all")) {

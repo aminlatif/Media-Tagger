@@ -4,14 +4,7 @@ use std::fs;
 
 use crate::rule::Rule;
 
-pub async fn scrape_data(
-    rule: &Rule, // target_directory: &str,
-                 // season_selector_query: &str,
-                 // season_selector_skip_init: i32,
-                 // episode_selector_query: &str,
-                 // episode_selector_skip_init: i32,
-                 // episode_field_selectors: Vec<Vec<String>>,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn scrape_data(rule: &Rule) -> Result<(), Box<dyn std::error::Error>> {
     let tagger_directory_path = rule.target_directory.to_string() + "/.tagger";
 
     let guide_html_file_path = tagger_directory_path.clone() + "/guide.html";
@@ -59,7 +52,12 @@ pub async fn scrape_data(
             }
 
             if episode_element
-                .select(&scraper::Selector::parse(&rule.episode_field_selectors[0].selector_query.as_str()).unwrap())
+                .select(
+                    &scraper::Selector::parse(
+                        &rule.episode_field_selectors[0].selector_query.as_str(),
+                    )
+                    .unwrap(),
+                )
                 .next()
                 .is_none()
             {
@@ -77,7 +75,10 @@ pub async fn scrape_data(
                     .next();
                 if field_element.is_none() {
                     println!("{:#?}", episode_element);
-                    panic!("Field {} is empty. {}: Season{}, Episode{}", field.title, episode_cul, season, episode);
+                    panic!(
+                        "Field {} is empty. {}: Season{}, Episode{}",
+                        field.title, episode_cul, season, episode
+                    );
                 }
                 let field_element = field_element.unwrap();
                 let field_value = field_element.inner_html();
@@ -101,10 +102,7 @@ pub async fn scrape_data(
     Ok(())
 }
 
-pub async fn get_html_content(
-    rule: &Rule, // target_directory: &str,
-                 // scrape_url: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn get_html_content(rule: &Rule) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder()
         .user_agent("MediaTgger/1.0 (contact: amin.latifkar@gmail.com)")
         .build()?;
@@ -135,7 +133,8 @@ pub fn refine_field_value(field_value: String) -> String {
         .replace("<br >", "\n")
         .replace("<br />", "\n");
     let field_value_html = scraper::Html::parse_document(&field_value);
-    let field_value = field_value_html.root_element()
+    let field_value = field_value_html
+        .root_element()
         .text()
         .collect::<Vec<_>>()
         .join("");

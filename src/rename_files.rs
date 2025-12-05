@@ -12,24 +12,22 @@ static TOKEN_DECODE_FORMAT_CLEAN_REGEX: Lazy<Regex> =
 static TOKEN_DECODE_FORMAT_TITLE_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"[ ',\.\-_%]"#).unwrap());
 
-pub fn rename_files(
-    rule: &Rule
-    // target_directory: &str,
-    // file_name_template: &str,
-    // file_name_check_template: &str,
-    // has_season_directory: bool,
-    // season_directory_template: &str,
-    // dry_run: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn generate_rename_csv(rule: &Rule) -> Result<(), Box<dyn std::error::Error>> {
     let csv_content = fs::read_to_string(rule.target_directory.to_string() + "/.tagger/guide.csv")?;
 
     let mut rdr = csv::Reader::from_reader(csv_content.as_bytes());
 
+    let tagger_directory_path = rule.target_directory.to_string() + "/.tagger";
+
+    let mut rename_csv_content = String::from("Target Name, Source Name, Directory Path\n");
+
     for result in rdr.records() {
         let record = result?;
         let fields: Vec<String> = record.iter().map(|s| s.to_string()).collect();
-        let target_file_name =
-            replace_file_name_template_tokens(String::from(rule.file_name_template.clone()), fields.clone());
+        let target_file_name = replace_file_name_template_tokens(
+            String::from(rule.file_name_template.clone()),
+            fields.clone(),
+        );
         let source_file_name_check = replace_file_name_template_tokens(
             String::from(rule.file_name_check_template.clone()),
             fields.clone(),
@@ -42,8 +40,10 @@ pub fn rename_files(
         let mut season_directory_path = rule.target_directory.to_string();
 
         if rule.has_season_directory {
-            let season_directory_name =
-                replace_file_name_template_tokens(String::from(rule.season_directory_template.clone()), fields);
+            let season_directory_name = replace_file_name_template_tokens(
+                String::from(rule.season_directory_template.clone()),
+                fields,
+            );
             season_directory_path = season_directory_path + "/" + &season_directory_name;
         }
 
@@ -84,20 +84,51 @@ pub fn rename_files(
                     + "."
                     + original_file_extension;
                 println!("\x1b[34mTaget file path: {}\x1b[0m", target_file_path);
-                if !rule.dry_run {
-                    fs::rename(
-                        path.clone(),
-                        season_directory_path.to_string()
-                            + "/"
-                            + &target_file_name
-                            + "."
-                            + original_file_extension,
-                    )?;
-                }
+
+                rename_csv_content = rename_csv_content
+                    + "\""
+                    + &target_file_name
+                    + "."
+                    + original_file_extension
+                    + "\""
+                    + ",";
+                rename_csv_content = rename_csv_content
+                    + "\""
+                    + &original_file_without_extension
+                    + "."
+                    + original_file_extension
+                    + "\""
+                    + ",";
+                rename_csv_content =
+                    rename_csv_content + "\"" + &season_directory_path + "\"";
+                rename_csv_content = rename_csv_content + "\n";
             }
         }
     }
 
+    fs::write(
+        tagger_directory_path.to_string() + "/rename.csv",
+        &rename_csv_content,
+    )?;
+
+    Ok(())
+}
+
+pub fn rename_files(rule: &Rule) -> Result<(), Box<dyn std::error::Error>> {
+    let rename_csv_content =
+        fs::read_to_string(rule.target_directory.to_string() + "/.tagger/rename.csv")?;
+    let mut rdr = csv::Reader::from_reader(rename_csv_content.as_bytes());
+
+    for result in rdr.records() {
+        let record = result?;
+        let fields: Vec<String> = record.iter().map(|s| s.to_string()).collect();
+        let source_file_path = fields[2].clone() + "/" + &fields[1];
+        let target_file_path = fields[2].clone() + "/" + &fields[0];
+        println!("renaimg {} to {}", source_file_path, target_file_path);
+        if !rule.dry_run {
+            fs::rename(source_file_path, target_file_path).unwrap();
+        }
+    }
     Ok(())
 }
 
@@ -137,7 +168,7 @@ fn replace_file_name_template_tokens(template: String, record: Vec<String>) -> S
 fn get_record_value_for_token(token: String, record: Vec<String>) -> String {
     let capture = TOKEN_DECODE_REGEX.captures(&token).unwrap();
     let token_type = capture[1].to_string();
-    let token_index : usize = capture[2].parse().unwrap();
+    let token_index: usize = capture[2].parse().unwrap();
     let token_format = capture[3].to_string();
     let mut token_format_hashmap: HashMap<String, u8> = HashMap::new();
 
@@ -168,6 +199,20 @@ fn get_record_value_for_token(token: String, record: Vec<String>) -> String {
                 string_value = TOKEN_DECODE_FORMAT_CLEAN_REGEX
                     .replace_all(&string_value, "")
                     .to_string();
+            }
+            if token_format_hashmap.contains_key("l") {
+                let mut max_length = token_format_hashmap["l"] as usize;
+                let number_of_sapces_in_name = string_value.chars().filter(|c| *c == ' ').count();
+                max_length = max_length + number_of_sapces_in_name;
+                let original_string_length = string_value.chars().count();
+                string_value = string_value.chars().take(max_length).collect();
+                let new_string_length = string_value.chars().count();
+                if original_string_length > new_string_length {
+                    string_value = match string_value.rfind(' ') {
+                        Some(idx) => string_value[..idx].to_string(),
+                        None => string_value,
+                    };
+                }
             }
             if token_format_hashmap.contains_key("t") {
                 string_value = to_pascal_case(&string_value);
